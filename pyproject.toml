@@ -1,0 +1,31 @@
+[project]
+name = "portfolio-rag-chatbot"
+version = "1.0.0"
+description = "RAG-powered portfolio chatbot with multi-agent orchestration"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.34",
+    "gunicorn>=23",
+    "openai>=1.82",
+    "langchain>=0.3",
+    "langchain-openai>=0.3",
+    "langchain-community>=0.3",
+    "langgraph>=0.4",
+    "pinecone>=5",
+    "langchain-text-splitters>=0.3",
+    "pypdf>=5",
+    "unstructured>=0.16",
+    "pydantic>=2",
+    "pydantic-settings>=2",
+    "sendgrid>=6",
+    "slowapi>=0.1",
+    "python-dotenv>=1.2.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "httpx>=0.28",
+]
