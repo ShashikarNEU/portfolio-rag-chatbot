@@ -20,6 +20,26 @@ class IngestPipeline:
     EMBED_BATCH_SIZE = 50
     UPSERT_BATCH_SIZE = 100
 
+    PRIORITY_MAP: dict[str, str] = {
+        # High — flagship projects
+        "03_cloud_webapp_project.md": "high",
+        "01_locall_project.md": "high",
+        "02_sidekick_project.md": "high",
+        # Medium
+        "08_dsa_leetcode.md": "medium",
+        "07_adv_bigdata_project.md": "medium",
+        "04_hospital_management_project.md": "medium",
+        # Low
+        "05_amazon_prototype_project.md": "low",
+        "06_student_management_project.md": "low",
+        "09_population_analysis_project.md": "low",
+        # General files — high
+        "00_projects_overview.md": "high",
+        "10_work_experience.md": "high",
+        "11_technical_skills.md": "high",
+        "12_about_education.md": "high",
+    }
+
     def __init__(self) -> None:
         load_dotenv()
 
@@ -47,16 +67,22 @@ class IngestPipeline:
             print(f"  Loaded: {md_file.name} ({len(text):,} chars)")
         return docs
 
+    def _get_priority(self, filename: str) -> str:
+        """Return priority level for a given filename."""
+        return self.PRIORITY_MAP.get(filename, "medium")
+
     def chunk(self, docs: list[dict]) -> list[dict]:
         """Split docs into chunks."""
         chunks: list[dict] = []
         for doc in docs:
             splits = self.splitter.split_text(doc["text"])
+            priority = self._get_priority(doc["source"])
             for idx, split_text in enumerate(splits):
                 chunks.append({
                     "id": f"{doc['source']}_{idx}",
                     "text": split_text,
                     "source": doc["source"],
+                    "priority": priority,
                 })
         return chunks
 
@@ -102,7 +128,11 @@ class IngestPipeline:
         for i in range(0, len(embedded_chunks), self.UPSERT_BATCH_SIZE):
             batch = embedded_chunks[i : i + self.UPSERT_BATCH_SIZE]
             vectors = [
-                (c["id"], c["values"], {"text": c["text"], "source": c["source"]})
+                (
+                    c["id"],
+                    c["values"],
+                    {"text": c["text"], "source": c["source"], "priority": c["priority"]},
+                )
                 for c in batch
             ]
             index.upsert(vectors=vectors)

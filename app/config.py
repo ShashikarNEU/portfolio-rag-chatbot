@@ -10,8 +10,8 @@ class Settings(BaseSettings):
     pinecone_index_name: str = "portfolio"
     chunk_size: int = 512
     chunk_overlap: int = 50
-    top_k_retrieval: int = 10
-    top_k_final: int = 3
+    top_k_retrieval: int = 7
+    top_k_final: int = 5
     sendgrid_api_key: str = ""
     recipient_email: str = ""
     sqlite_db_path: str = "./data/chat_history.db"

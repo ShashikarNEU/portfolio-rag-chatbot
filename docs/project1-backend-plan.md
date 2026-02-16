@@ -30,7 +30,7 @@ Two nodes. The LLM decides when to call tools — no manual routing.
 ### Tech Stack
 - **API**: FastAPI (async, Pydantic validation, auto Swagger docs at `/docs`)
 - **Orchestration**: LangGraph (StateGraph + SqliteSaver + ToolNode + tools_condition)
-- **LLM**: GPT-5 mini — $0.25/$2 per 1M tokens
+- **LLM**: GPT-5 nano — $0.05/$0.40 per 1M tokens
 - **Embeddings**: text-embedding-3-small — $0.02/1M tokens
 - **Vector DB**: Pinecone (serverless, free tier)
 - **Conversation Persistence**: LangGraph SqliteSaver
@@ -108,7 +108,7 @@ from app.graph.tools import search_portfolio, send_email
 from app.utils.prompts import WORKER_SYSTEM_PROMPT
 
 tools = [search_portfolio, send_email]
-model = init_chat_model("gpt-5-mini", temperature=0)
+model = init_chat_model("gpt-5-nano", temperature=0)
 model_with_tools = model.bind_tools(tools)
 
 def worker_node(state: State):
