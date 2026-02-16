@@ -34,7 +34,8 @@ class IngestPipeline:
         "06_student_management_project.md": "low",
         "09_population_analysis_project.md": "low",
         # General files — high
-        "00_projects_overview.md": "high",
+        "00_flagship_overview.md": "high",
+        "00_secondary_projects.md": "medium",
         "10_work_experience.md": "high",
         "11_technical_skills.md": "high",
         "12_about_education.md": "high",

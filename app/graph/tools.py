@@ -22,7 +22,6 @@ class RAGPipeline:
         self._retriever = Retriever(self._llm)
         self._reranker = Reranker(self._llm)
 
-    # Singleton pattern to ensure only one instance of RAGPipeline is created
     @classmethod
     def get_instance(cls) -> "RAGPipeline":
         if cls._instance is None:
@@ -32,30 +31,28 @@ class RAGPipeline:
     def search(self, query: str) -> tuple[str, list[dict]]:
         """Run full RAG pipeline: expand -> retrieve -> rerank.
 
-        Pipelines expansion with original-query retrieval so the ~1s
-        expansion LLM call overlaps with the original embed+search.
-
-        Returns (formatted_context, sources) where context is what the LLM
-        sees and sources is structured metadata for the API response.
+        Returns (formatted_context, sources).
         """
-        # Phase 1: expand queries AND embed+search original query in parallel
+        # Step 1: while the LLM generates expanded queries (~1s),
+        # simultaneously embed+search the original query in Pinecone.
         with ThreadPoolExecutor(max_workers=2) as pool:
             expand_future = pool.submit(self._expander.expand, query)
-            orig_future = pool.submit(
-                self._retriever.embed_and_search_one, query,
+            original_future = pool.submit(
+                self._retriever.search_queries, [query],
             )
 
-        orig_matches = orig_future.result()
+        original_matches = original_future.result()
         expanded = expand_future.result()
 
-        # Phase 2: batch embed+search only the expanded queries
-        exp_match_lists = self._retriever.embed_and_search_batch(expanded)
+        # Step 2: embed+search expanded queries
+        exp_matches = self._retriever.search_queries(expanded)
 
-        # Phase 3: fuse all results via RRF + priority boost
-        all_matches = [orig_matches] + exp_match_lists
-        candidates = self._retriever.fuse_and_rank(all_matches)
+        # Step 3: fuse all results via RRF + priority boost
+        candidates = self._retriever.fuse_and_rank(
+            original_matches + exp_matches,
+        )
 
-        # Phase 4: LLM rerank
+        # Step 4: LLM rerank
         top_chunks = self._reranker.rerank(query, candidates)
 
         context_parts: list[str] = []
@@ -104,11 +101,24 @@ def send_email(
 ) -> Command:
     """Send a contact email to Shashikar with the visitor's details.
     Only call this when you have all three: name, email, and inquiry."""
-    # Mock for now — SendGrid integration in Phase 5
+    from app.services.email_service import EmailService
+
+    service = EmailService.get_instance()
+    success = service.send_contact_email(name, email, inquiry)
+
+    if success:
+        return Command(update={
+            "email_sent": True,
+            "messages": [ToolMessage(
+                content=f"Email sent successfully from {name} ({email})",
+                tool_call_id=tool_call_id,
+                name="send_email",
+            )],
+        })
     return Command(update={
-        "email_sent": True,
+        "email_sent": False,
         "messages": [ToolMessage(
-            content=f"Email sent successfully from {name} ({email})",
+            content="Failed to send email. Please try again later.",
             tool_call_id=tool_call_id,
             name="send_email",
         )],
