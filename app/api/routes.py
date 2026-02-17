@@ -50,21 +50,27 @@ def chat(request: Request, body: ChatRequest) -> ChatResponse:
             thread_id=body.thread_id,
         )
 
-    graph = request.app.state.graph
-    config = {"configurable": {"thread_id": body.thread_id}}
-    result = graph.invoke(
-        {"messages": [HumanMessage(content=body.message)]},
-        config=config,
-    )
+    try:
+        graph = request.app.state.graph
+        config = {"configurable": {"thread_id": body.thread_id}}
+        result = graph.invoke(
+            {"messages": [HumanMessage(content=body.message)]},
+            config=config,
+        )
 
-    last_message = result["messages"][-1]
+        last_message = result["messages"][-1]
 
-    return ChatResponse(
-        response=last_message.content,
-        thread_id=body.thread_id,
-        sources=[Source(**s) for s in result.get("sources", [])],
-        email_sent=result.get("email_sent", False),
-    )
+        return ChatResponse(
+            response=last_message.content,
+            thread_id=body.thread_id,
+            sources=[Source(**s) for s in result.get("sources", [])],
+            email_sent=result.get("email_sent", False),
+        )
+    except Exception:
+        return ChatResponse(
+            response="Sorry, something went wrong processing your message. Please try again.",
+            thread_id=body.thread_id,
+        )
 
 
 @router.get("/health")

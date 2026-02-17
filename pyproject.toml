@@ -32,9 +32,17 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=8",
+    "pytest-asyncio>=0.24",
     "httpx>=0.28",
     "ruff>=0.15.1",
 ]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "integration: live integration tests (require running server + real API keys)",
+]
+addopts = "-m 'not integration'"
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

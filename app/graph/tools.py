@@ -48,17 +48,17 @@ class RAGPipeline:
         exp_matches = self._retriever.search_queries(expanded)
 
         # Step 3: fuse all results via RRF + priority boost
-        candidates = self._retriever.fuse_and_rank(
+        top_chunks = self._retriever.fuse_and_rank(
             original_matches + exp_matches,
         )
 
         # Step 4: LLM rerank
-        top_chunks = self._reranker.rerank(query, candidates)
+        #top_chunks = self._reranker.rerank(query, candidates)
 
         context_parts: list[str] = []
         sources: list[dict] = []
         for chunk in top_chunks:
-            score = chunk["relevance_score"] / 10
+            score = chunk["rrf_score"] 
             context_parts.append(
                 f"[Source: {chunk['source']} | Relevance: {score:.2f}]\n"
                 f"{chunk['text']}"
@@ -80,16 +80,26 @@ def search_portfolio(
     """Search Shashikar Anthoni Raj's portfolio for information about his
     skills, projects, experience, and education. Use this for any question
     about Shashikar."""
-    pipeline = RAGPipeline.get_instance()
-    context, sources = pipeline.search(query)
-    return Command(update={
-        "sources": sources,
-        "messages": [ToolMessage(
-            content=context,
-            tool_call_id=tool_call_id,
-            name="search_portfolio",
-        )],
-    })
+    try:
+        pipeline = RAGPipeline.get_instance()
+        context, sources = pipeline.search(query)
+        return Command(update={
+            "sources": sources,
+            "messages": [ToolMessage(
+                content=context,
+                tool_call_id=tool_call_id,
+                name="search_portfolio",
+            )],
+        })
+    except Exception:
+        return Command(update={
+            "sources": [],
+            "messages": [ToolMessage(
+                content="I'm having trouble searching right now. Please try again in a moment.",
+                tool_call_id=tool_call_id,
+                name="search_portfolio",
+            )],
+        })
 
 
 @tool
@@ -101,28 +111,38 @@ def send_email(
 ) -> Command:
     """Send a contact email to Shashikar with the visitor's details.
     Only call this when you have all three: name, email, and inquiry."""
-    from app.services.email_service import EmailService
+    try:
+        from app.services.email_service import EmailService
 
-    service = EmailService.get_instance()
-    success = service.send_contact_email(name, email, inquiry)
+        service = EmailService.get_instance()
+        success = service.send_contact_email(name, email, inquiry)
 
-    if success:
+        if success:
+            return Command(update={
+                "email_sent": True,
+                "messages": [ToolMessage(
+                    content=f"Email sent successfully from {name} ({email})",
+                    tool_call_id=tool_call_id,
+                    name="send_email",
+                )],
+            })
         return Command(update={
-            "email_sent": True,
+            "email_sent": False,
             "messages": [ToolMessage(
-                content=f"Email sent successfully from {name} ({email})",
+                content="Couldn't send email, please try again.",
                 tool_call_id=tool_call_id,
                 name="send_email",
             )],
         })
-    return Command(update={
-        "email_sent": False,
-        "messages": [ToolMessage(
-            content="Failed to send email. Please try again later.",
-            tool_call_id=tool_call_id,
-            name="send_email",
-        )],
-    })
+    except Exception:
+        return Command(update={
+            "email_sent": False,
+            "messages": [ToolMessage(
+                content="Couldn't send email, please try again.",
+                tool_call_id=tool_call_id,
+                name="send_email",
+            )],
+        })
 
 
 tools = [search_portfolio, send_email]
