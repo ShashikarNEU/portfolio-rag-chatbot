@@ -1,4 +1,4 @@
-from concurrent.futures import ThreadPoolExecutor
+# from concurrent.futures import ThreadPoolExecutor  # re-enable with query expansion
 from typing import Annotated
 
 from langchain_core.messages import ToolMessage
@@ -29,31 +29,34 @@ class RAGPipeline:
         return cls._instance
 
     def search(self, query: str) -> tuple[str, list[dict]]:
-        """Run full RAG pipeline: expand -> retrieve -> rerank.
+        """Run full RAG pipeline: retrieve -> rerank.
 
         Returns (formatted_context, sources).
         """
-        # Step 1: while the LLM generates expanded queries (~1s),
-        # simultaneously embed+search the original query in Pinecone.
-        with ThreadPoolExecutor(max_workers=2) as pool:
-            expand_future = pool.submit(self._expander.expand, query)
-            original_future = pool.submit(
-                self._retriever.search_queries, [query],
-            )
+        # Query expansion disabled to stay under 30s timeout on broad queries.
+        # To re-enable, uncomment the block below and change Step 3 back to
+        # fuse_and_rank(original_matches + exp_matches).
 
-        original_matches = original_future.result()
-        expanded = expand_future.result()
+        # # Step 1: while the LLM generates expanded queries (~1s),
+        # # simultaneously embed+search the original query in Pinecone.
+        # with ThreadPoolExecutor(max_workers=2) as pool:
+        #     expand_future = pool.submit(self._expander.expand, query)
+        #     original_future = pool.submit(
+        #         self._retriever.search_queries, [query],
+        #     )
+        # original_matches = original_future.result()
+        # expanded = expand_future.result()
+        # # Step 2: embed+search expanded queries
+        # exp_matches = self._retriever.search_queries(expanded)
 
-        # Step 2: embed+search expanded queries
-        exp_matches = self._retriever.search_queries(expanded)
+        # Step 1: embed+search the original query
+        original_matches = self._retriever.search_queries([query])
 
-        # Step 3: fuse all results via RRF + priority boost
-        top_chunks = self._retriever.fuse_and_rank(
-            original_matches + exp_matches,
-        )
+        # Step 2: fuse results via RRF + priority boost
+        top_chunks = self._retriever.fuse_and_rank(original_matches)
 
-        # Step 4: LLM rerank
-        #top_chunks = self._reranker.rerank(query, candidates)
+        # Step 3: LLM rerank — disabled, adds ~15s per query (exceeds 30s timeout)
+        # top_chunks = self._reranker.rerank(query, top_chunks)
 
         context_parts: list[str] = []
         sources: list[dict] = []

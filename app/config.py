@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     chunk_size: int = 512
     chunk_overlap: int = 50
     top_k_retrieval: int = 12
-    top_k_final: int = 5
+    top_k_final: int = 3
     sendgrid_api_key: str = ""
     sender_email: str = "shashiantonydbz@gmail.com"
     recipient_email: str = ""

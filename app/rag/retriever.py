@@ -6,7 +6,7 @@ from app.config import settings
 from app.services.llm_service import LLMService
 
 RRF_K = 60
-SEARCH_TOP_K = 10
+SEARCH_TOP_K = 5
 PRIORITY_BOOST: dict[str, float] = {"high": 2.0, "medium": 1.0, "low": 0.5}
 
 
