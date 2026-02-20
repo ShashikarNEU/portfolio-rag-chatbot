@@ -99,20 +99,27 @@ async def chat_stream(request: Request, body: ChatRequest) -> EventSourceRespons
                     if "tools" in chunk:
                         tool_state = chunk["tools"]
 
-                        # Capture sources and email_sent from tool results
-                        if "sources" in tool_state:
-                            sources = tool_state["sources"]
-                        if "email_sent" in tool_state:
-                            email_sent = tool_state["email_sent"]
+                        # ToolNode with Command returns may send a list
+                        # of update dicts instead of a single dict.
+                        updates = (
+                            tool_state if isinstance(tool_state, list)
+                            else [tool_state]
+                        )
 
-                        # Extract tool result text for the client
-                        msgs = tool_state.get("messages", [])
-                        for msg in msgs:
-                            tool_name = getattr(msg, "name", "tool")
-                            yield _sse_event("tool_result", {
-                                "tool": tool_name,
-                                "preview": str(msg.content)[:200],
-                            })
+                        for upd in updates:
+                            if not isinstance(upd, dict):
+                                continue
+                            if "sources" in upd:
+                                sources = upd["sources"]
+                            if "email_sent" in upd:
+                                email_sent = upd["email_sent"]
+
+                            for msg in upd.get("messages", []):
+                                tool_name = getattr(msg, "name", "tool")
+                                yield _sse_event("tool_result", {
+                                    "tool": tool_name,
+                                    "preview": str(msg.content)[:200],
+                                })
 
                         yield _sse_event("thinking", {"text": "Generating response..."})
 
