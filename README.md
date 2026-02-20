@@ -5,6 +5,7 @@
 ![LangGraph](https://img.shields.io/badge/LangGraph-0.4-7C3AED)
 ![Pinecone](https://img.shields.io/badge/Pinecone-Serverless-00B050?logo=pinecone&logoColor=white)
 ![OpenAI](https://img.shields.io/badge/OpenAI-GPT--5--Mini-412991?logo=openai&logoColor=white)
+![LangSmith](https://img.shields.io/badge/LangSmith-Observability-F1883D?logo=langchain&logoColor=white)
 ![SSE](https://img.shields.io/badge/Streaming-SSE-FF6B35)
 
 A production-grade **multi-agent RAG chatbot** powering [Shashikar Anthoni Raj's portfolio](https://shashikaranthoniraj.netlify.app). Visitors can ask natural language questions about skills, projects, and experience — explore live GitHub repositories and source code — or send a contact email — all through a real-time streaming conversational interface.
@@ -21,6 +22,8 @@ Built with **LangGraph** agentic orchestration, **RAG with RRF fusion**, **live 
 - **Multi-Tool Agent** — LangGraph orchestrates 4 tools: portfolio search, GitHub explorer, file reader, and email sender
 - **Disconnect Recovery** — Detects client disconnects mid-stream, cleans up corrupted checkpoints, and signals the frontend to reset
 - **Persistent Memory** — SQLite-backed conversation history with thread-based checkpointing
+- **LangSmith Observability** — Full tracing of every LLM call, tool invocation, token usage, latency, and RAG retrieval quality across all conversations
+- **Zero Cold Starts** — UptimeRobot pings the health endpoint every 5 minutes, keeping the Render instance permanently warm
 
 ---
 
@@ -62,6 +65,8 @@ graph TD
 
     E -->|Token stream| P[SSE EventSource]
     P --> Q[Frontend UI]
+
+    D -->|Trace every run| R[LangSmith]
 ```
 
 ---
@@ -74,6 +79,23 @@ graph TD
 | **RRF Fusion** | Reciprocal Rank Fusion merges and re-ranks results across all queries |
 | **Priority Boost** | Recent and high-importance documents get a configurable relevance boost |
 | **Citation Tracking** | Every response includes source document names and relevance scores |
+
+---
+
+## Observability — LangSmith
+
+Every request is fully traced end-to-end via **LangSmith**, giving production-level visibility into the entire agent pipeline:
+
+| What's Tracked | Details |
+|---|---|
+| **LLM calls** | Input/output, model, token counts (prompt + completion), latency per call |
+| **Tool invocations** | Which tool was called, arguments, execution time, result |
+| **RAG retrieval** | Query variants, retrieved chunks, relevance scores, RRF fusion results |
+| **Agent traces** | Full LangGraph run trace — every node, edge, and state transition |
+| **Cost tracking** | Per-conversation token usage mapped to OpenAI pricing |
+| **Error tracing** | Failed tool calls, LLM errors, and thread corruption events captured with full context |
+
+LangSmith tracing is enabled via `LANGCHAIN_TRACING_V2=true` and `LANGCHAIN_API_KEY` in the environment — zero code changes required, LangGraph instruments automatically.
 
 ---
 
@@ -119,7 +141,9 @@ Features: TTL caching (1hr repos, 5min details), concurrent README fetching for 
 | GitHub | GitHub REST API v3 with TTL caching |
 | Email | SendGrid |
 | Persistence | SQLite (async LangGraph checkpointer) |
-| Hosting | Render (free tier) + UptimeRobot keepalive |
+| Observability | LangSmith (full LLM + tool + RAG tracing, cost tracking) |
+| Hosting | Render (free tier) |
+| Uptime | UptimeRobot — health check ping every 5 min (zero cold starts) |
 | Package Manager | uv |
 
 ---
@@ -174,6 +198,7 @@ data: {"thread_id": "session-1"}
 - Pinecone API key (free tier)
 - SendGrid API key
 - GitHub token (optional, increases API rate limits)
+- LangSmith API key (optional, enables full observability)
 
 ### 1. Clone and Install
 
@@ -188,6 +213,13 @@ uv sync
 ```bash
 cp .env.example .env
 # Fill in API keys: OPENAI_API_KEY, PINECONE_API_KEY, etc.
+```
+
+#### LangSmith (optional but recommended)
+```env
+LANGCHAIN_TRACING_V2=true
+LANGCHAIN_API_KEY=your_langsmith_api_key
+LANGCHAIN_PROJECT=portfolio-rag-chatbot
 ```
 
 ### 3. Ingest Portfolio Data
