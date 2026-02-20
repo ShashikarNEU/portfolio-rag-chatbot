@@ -4,11 +4,23 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-0.4-7C3AED)
 ![Pinecone](https://img.shields.io/badge/Pinecone-Serverless-00B050?logo=pinecone&logoColor=white)
-![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4o--mini-412991?logo=openai&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI-GPT--5--Mini-412991?logo=openai&logoColor=white)
+![SSE](https://img.shields.io/badge/Streaming-SSE-FF6B35)
 
-An advanced **RAG (Retrieval-Augmented Generation) chatbot** for [Shashikar Anthoni Raj's portfolio](https://shashikaranthoniraj.netlify.app). Visitors can ask natural language questions about skills, projects, work experience, and education — or send a contact email — all through a single conversational interface.
+A production-grade **multi-agent RAG chatbot** powering [Shashikar Anthoni Raj's portfolio](https://shashikaranthoniraj.netlify.app). Visitors can ask natural language questions about skills, projects, and experience — explore live GitHub repositories and source code — or send a contact email — all through a real-time streaming conversational interface.
 
-Built with production-grade RAG techniques: **query expansion**, **RRF (Reciprocal Rank Fusion)** multi-query retrieval, **LLM reranking**, and a **LangGraph** agentic workflow with persistent conversation memory.
+Built with **LangGraph** agentic orchestration, **RAG with RRF fusion**, **live GitHub API integration**, and **SSE token-by-token streaming** with disconnect detection and automatic checkpoint recovery.
+
+---
+
+## Key Features
+
+- **Real-time SSE Streaming** — Token-by-token response streaming with live thinking indicators and tool call notifications
+- **Live GitHub Integration** — Explores repos, reads source code, analyzes project architecture in real-time via GitHub REST API
+- **Advanced RAG Pipeline** — RRF fusion, priority boosting, and citation tracking over Pinecone vector search
+- **Multi-Tool Agent** — LangGraph orchestrates 4 tools: portfolio search, GitHub explorer, file reader, and email sender
+- **Disconnect Recovery** — Detects client disconnects mid-stream, cleans up corrupted checkpoints, and signals the frontend to reset
+- **Persistent Memory** — SQLite-backed conversation history with thread-based checkpointing
 
 ---
 
@@ -16,44 +28,82 @@ Built with production-grade RAG techniques: **query expansion**, **RRF (Reciproc
 
 Embedded on the portfolio site: [shashikaranthoniraj.netlify.app](https://shashikaranthoniraj.netlify.app)
 
+Backend API: [portfolio-rag-chatbot-x19x.onrender.com](https://portfolio-rag-chatbot-x19x.onrender.com/api/v1/health)
+
 ---
 
 ## Architecture
 
 ```mermaid
 graph TD
-    A[User Message] --> B[FastAPI POST /api/v1/chat]
-    B --> C[LangGraph StateGraph]
-    C --> D[Worker Node — LLM]
+    A[User Message] --> B[FastAPI]
+    B --> C{SSE Stream}
+    C --> D[LangGraph StateGraph]
+    D --> E[Worker Node — GPT-5 Mini]
 
-    D -->|Greeting / small talk| E[Direct Response → END]
-    D -->|Portfolio question| F[search_portfolio tool]
-    D -->|Contact request| G[send_email tool]
+    E -->|Greeting / small talk| F[Direct Response]
+    E -->|Portfolio question| G[search_portfolio]
+    E -->|Project / code question| H[explore_github]
+    E -->|Show source code| I[read_github_file]
+    E -->|Contact request| J[send_email]
 
-    F --> H[Query Expansion — 2 variants]
-    H --> I[Pinecone Search × 3 queries]
-    I --> J[RRF Fusion + Priority Boost]
-    J --> K[LLM Reranking — top 5 chunks]
-    K --> D
+    G --> K[Pinecone Vector Search]
+    K --> L[RRF Fusion + Priority Boost]
+    L --> E
 
-    G --> L[SendGrid API]
-    L --> D
+    H --> M[GitHub REST API]
+    M --> E
 
-    D -->|Final answer with citations| M[ChatResponse JSON]
+    I --> N[GitHub File Contents API]
+    N --> E
+
+    J --> O[SendGrid API]
+    O --> E
+
+    E -->|Token stream| P[SSE EventSource]
+    P --> Q[Frontend UI]
 ```
 
 ---
 
-## RAG Pipeline — Advanced Techniques
+## RAG Pipeline
 
 | Technique | Description |
 |-----------|-------------|
-| **Query Expansion** | LLM generates 2 semantic variants of the user's question to improve recall |
-| **Multi-Query Retrieval** | All 3 queries (original + 2 variants) are run against Pinecone in parallel |
-| **RRF Fusion** | Reciprocal Rank Fusion merges and re-ranks results from all 3 queries |
-| **Priority Boost** | Recent/high-importance documents (e.g., current job) get a relevance boost |
-| **LLM Reranking** | A second LLM pass selects the top 5 most contextually relevant chunks |
-| **Citation Tracking** | Response includes source document names and relevance scores |
+| **Multi-Query Retrieval** | Original query + expanded variants searched in parallel against Pinecone |
+| **RRF Fusion** | Reciprocal Rank Fusion merges and re-ranks results across all queries |
+| **Priority Boost** | Recent and high-importance documents get a configurable relevance boost |
+| **Citation Tracking** | Every response includes source document names and relevance scores |
+
+---
+
+## SSE Streaming Events
+
+The `/api/v2/chat/stream` endpoint emits structured SSE events for rich frontend rendering:
+
+| Event | Description |
+|-------|-------------|
+| `thinking` | Processing status updates ("Using search_portfolio...") |
+| `token` | Individual response tokens for real-time text rendering |
+| `tool_call` | Tool invocation notification with tool name |
+| `tool_result` | Tool execution result preview |
+| `sources` | RAG source documents with relevance scores |
+| `email_status` | Email delivery confirmation |
+| `thread_reset` | Corrupted thread detected — frontend should generate new thread ID |
+| `done` | Stream complete with thread ID |
+
+---
+
+## GitHub Integration
+
+The chatbot can explore Shashikar's GitHub profile in real-time:
+
+| Tool | Capability |
+|------|-----------|
+| `explore_github` | List repos, get repo details (README, languages, file tree), view recent activity |
+| `read_github_file` | Read any source file from any repository with syntax-highlighted output |
+
+Features: TTL caching (1hr repos, 5min details), concurrent README fetching for repos without descriptions, automatic fallback to RAG on API errors.
 
 ---
 
@@ -61,13 +111,15 @@ graph TD
 
 | Layer | Technology |
 |---|---|
-| API | FastAPI + SlowAPI (rate limiting) |
-| Orchestration | LangGraph (StateGraph + ToolNode + SqliteSaver) |
-| LLM | GPT-4o-mini via `langchain-openai` |
-| Embeddings | `text-embedding-3-small` |
+| API | FastAPI + SSE (sse-starlette) + SlowAPI rate limiting |
+| Orchestration | LangGraph (StateGraph + ToolNode + AsyncSqliteSaver) |
+| LLM | GPT-5 Mini via `langchain-openai` |
+| Embeddings | `text-embedding-3-small` (1536 dimensions) |
 | Vector DB | Pinecone (serverless, free tier) |
+| GitHub | GitHub REST API v3 with TTL caching |
 | Email | SendGrid |
-| Persistence | SQLite (LangGraph conversation checkpoints) |
+| Persistence | SQLite (async LangGraph checkpointer) |
+| Hosting | Render (free tier) + UptimeRobot keepalive |
 | Package Manager | uv |
 
 ---
@@ -76,33 +128,38 @@ graph TD
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| POST | `/api/v1/chat` | Send a message, get a response with citations |
-| GET | `/api/v1/health` | Health check |
-| GET | `/api/v1/graph/image` | Returns LangGraph workflow as a PNG |
+| POST | `/api/v2/chat/stream` | SSE streaming chat (primary) |
+| POST | `/api/v1/chat` | JSON request/response chat (legacy) |
+| GET/HEAD | `/api/v1/health` | Health check (supports uptime monitors) |
 
-### Example Request
+### Example: SSE Streaming
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/chat \
+curl -N -X POST https://portfolio-rag-chatbot-x19x.onrender.com/api/v2/chat/stream \
   -H "Content-Type: application/json" \
   -d '{"message": "What projects has Shashikar built?", "thread_id": "session-1"}'
 ```
 
-### Example Response
+```
+event: thinking
+data: {"text": "Processing your message..."}
 
-```json
-{
-  "response": "Shashikar has built several notable projects including...",
-  "thread_id": "session-1",
-  "sources": [
-    {
-      "document": "projects.md",
-      "chunk": "Portfolio RAG Chatbot, Sidekick AI Agent...",
-      "relevance_score": 0.95
-    }
-  ],
-  "email_sent": false
-}
+event: tool_call
+data: {"tool": "explore_github", "id": "call_abc123"}
+
+event: thinking
+data: {"text": "Using explore_github..."}
+
+event: token
+data: {"text": "Shashikar"}
+
+event: token
+data: {"text": " has"}
+
+...
+
+event: done
+data: {"thread_id": "session-1"}
 ```
 
 ---
@@ -114,8 +171,9 @@ curl -X POST http://localhost:8000/api/v1/chat \
 - Python 3.13+
 - [uv](https://docs.astral.sh/uv/) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - OpenAI API key
-- Pinecone API key (free tier works)
+- Pinecone API key (free tier)
 - SendGrid API key
+- GitHub token (optional, increases API rate limits)
 
 ### 1. Clone and Install
 
@@ -129,12 +187,10 @@ uv sync
 
 ```bash
 cp .env.example .env
-# Fill in OPENAI_API_KEY, PINECONE_API_KEY, SENDGRID_API_KEY, etc.
+# Fill in API keys: OPENAI_API_KEY, PINECONE_API_KEY, etc.
 ```
 
 ### 3. Ingest Portfolio Data
-
-Embeds all markdown files in `data/raw/` and upserts them to Pinecone:
 
 ```bash
 uv run python scripts/ingest.py
@@ -149,7 +205,7 @@ uv run uvicorn app.main:app --reload
 - API: `http://localhost:8000`
 - Swagger UI: `http://localhost:8000/docs`
 
-### 5. Docker (Alternative)
+### 5. Docker
 
 ```bash
 docker compose up --build
@@ -162,29 +218,36 @@ docker compose up --build
 ```
 portfolio-rag-chatbot/
 ├── app/
-│   ├── main.py                 # FastAPI app, CORS, lifespan
-│   ├── config.py               # pydantic-settings (.env loader)
-│   ├── api/routes.py           # POST /chat, GET /health, GET /graph/image
+│   ├── main.py                    # FastAPI app, CORS, lifespan
+│   ├── config.py                  # pydantic-settings (.env loader)
+│   ├── api/
+│   │   ├── routes.py              # V1 JSON endpoints + health check
+│   │   └── routes_v2.py           # V2 SSE streaming + disconnect detection
 │   ├── graph/
-│   │   ├── builder.py          # LangGraph StateGraph compilation
-│   │   ├── worker.py           # LLM node with bound tools
-│   │   └── tools.py            # search_portfolio + send_email tools
+│   │   ├── builder.py             # LangGraph compilation + checkpointer
+│   │   ├── worker.py              # Async LLM node with corruption recovery
+│   │   └── tools.py               # RAG search, GitHub, email tools
+│   ├── models/
+│   │   ├── state.py               # LangGraph state (messages, thread_corrupted)
+│   │   └── schemas.py             # Pydantic request/response models
 │   ├── rag/
-│   │   ├── query_expansion.py  # LLM query variant generation
-│   │   ├── retriever.py        # Pinecone search + RRF fusion
-│   │   └── reranker.py         # LLM relevance scoring
+│   │   ├── query_expansion.py     # LLM query variant generation
+│   │   ├── retriever.py           # Pinecone search + RRF fusion
+│   │   └── reranker.py            # LLM relevance scoring
 │   ├── services/
-│   │   ├── llm_service.py      # OpenAI chat + embeddings wrapper
-│   │   └── email_service.py    # SendGrid wrapper
-│   └── utils/prompts.py        # System prompts
-├── scripts/
-│   ├── ingest.py               # Data ingestion pipeline
-│   ├── test_rag.py             # Manual RAG pipeline test
-│   └── test_graph.py           # End-to-end graph test
+│   │   ├── llm_service.py         # OpenAI chat + embeddings wrapper
+│   │   ├── email_service.py       # SendGrid wrapper
+│   │   └── github_service.py      # GitHub REST API with TTL caching
+│   └── utils/prompts.py           # System prompt with routing logic
 ├── tests/
-│   ├── conftest.py             # Fixtures
-│   └── test_api.py             # API unit tests
-├── data/raw/                   # Portfolio markdown source files
+│   ├── conftest.py                # Shared fixtures (graph, client)
+│   ├── test_api.py                # V1 API tests
+│   ├── test_sse.py                # V2 SSE streaming tests
+│   ├── test_graph.py              # LangGraph integration tests
+│   ├── test_rag.py                # RAG pipeline tests
+│   └── test_github_tools.py       # GitHub service tests
+├── data/raw/                      # Portfolio markdown source files
+├── scripts/ingest.py              # Data ingestion pipeline
 ├── Dockerfile
 ├── docker-compose.yml
 ├── pyproject.toml
@@ -193,16 +256,25 @@ portfolio-rag-chatbot/
 
 ---
 
-## Development
+## Testing
 
 ```bash
-# Run tests
+# Run full test suite (30 tests)
 uv run pytest -v
 
 # Lint
 uv run ruff check .
-
-# Manual integration tests (requires real API keys)
-uv run python scripts/test_rag.py
-uv run python scripts/test_graph.py
 ```
+
+Test coverage: API endpoints, SSE streaming, LangGraph integration, RAG pipeline, and GitHub tools.
+
+---
+
+## Disconnect Recovery
+
+The system handles client disconnects (browser close, network drop, timeout) gracefully:
+
+1. **Detection** — `request.is_disconnected()` check on every stream iteration
+2. **Corruption flag** — Worker sets `thread_corrupted: True` if OpenAI rejects orphaned tool calls
+3. **Checkpoint cleanup** — Corrupted thread is deleted from SQLite in a `finally` block
+4. **Frontend signal** — `thread_reset` SSE event tells the client to generate a new thread ID
