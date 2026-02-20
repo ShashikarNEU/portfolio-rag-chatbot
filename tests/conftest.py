@@ -1,29 +1,35 @@
-"""Shared test fixtures.
+"""Shared test fixtures — all tests use real APIs."""
 
-Dummy env vars are set before any app imports so pydantic-settings
-can instantiate Settings() without a real .env file.
-"""
-
-import os
 from collections.abc import AsyncIterator
-from unittest.mock import MagicMock
 
-# Must be set BEFORE any app.* imports trigger Settings()
-os.environ.setdefault("OPENAI_API_KEY", "test-openai-key")
-os.environ.setdefault("PINECONE_API_KEY", "test-pinecone-key")
-os.environ.setdefault("SENDGRID_API_KEY", "test-sendgrid-key")
-os.environ.setdefault("RECIPIENT_EMAIL", "test@example.com")
+import httpx
+import pytest
 
-import httpx  # noqa: E402
-import pytest  # noqa: E402
+from app.graph.builder import build_graph
+from app.main import app
 
-from app.main import app  # noqa: E402
+
+@pytest.fixture(scope="session")
+async def graph_and_checkpointer():
+    """Build a real LangGraph with async checkpointer."""
+    compiled, checkpointer, conn = await build_graph("./data/test_chat_history.db")
+    yield compiled, checkpointer
+    await conn.close()
+
+
+@pytest.fixture(scope="session")
+async def graph(graph_and_checkpointer):
+    """Expose compiled graph for tests that only need the graph."""
+    graph, _checkpointer = graph_and_checkpointer
+    return graph
 
 
 @pytest.fixture()
-async def client() -> AsyncIterator[httpx.AsyncClient]:
-    """Async httpx test client backed by the FastAPI ASGI app."""
-    app.state.graph = MagicMock()
+async def client(graph_and_checkpointer) -> AsyncIterator[httpx.AsyncClient]:
+    """Async httpx test client backed by the real graph."""
+    graph, checkpointer = graph_and_checkpointer
+    app.state.graph = graph
+    app.state.checkpointer = checkpointer
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
         yield c

@@ -1,6 +1,9 @@
+import logging
 from datetime import date
 
 from fastapi import APIRouter, Request
+
+logger = logging.getLogger(__name__)
 from fastapi.responses import Response
 from langchain_core.messages import HumanMessage
 from slowapi import Limiter
@@ -38,12 +41,8 @@ _budget = DailyBudget(settings.daily_max_requests)
 
 @router.post("/chat", response_model=ChatResponse)
 @limiter.limit("10/minute")
-def chat(request: Request, body: ChatRequest) -> ChatResponse:
-    """Process a chat message through the LangGraph pipeline.
-
-    Sync handler — FastAPI runs it in a thread pool, which is required
-    because SqliteSaver does not support async operations.
-    """
+async def chat(request: Request, body: ChatRequest) -> ChatResponse:
+    """Process a chat message through the LangGraph pipeline."""
     if not _budget.allow():
         return ChatResponse(
             response="I'm resting for today. Please try again tomorrow!",
@@ -53,7 +52,7 @@ def chat(request: Request, body: ChatRequest) -> ChatResponse:
     try:
         graph = request.app.state.graph
         config = {"configurable": {"thread_id": body.thread_id}}
-        result = graph.invoke(
+        result = await graph.ainvoke(
             {"messages": [HumanMessage(content=body.message)]},
             config=config,
         )
@@ -67,6 +66,7 @@ def chat(request: Request, body: ChatRequest) -> ChatResponse:
             email_sent=result.get("email_sent", False),
         )
     except Exception:
+        logger.exception("Chat request failed (v1)")
         return ChatResponse(
             response="Sorry, something went wrong processing your message. Please try again.",
             thread_id=body.thread_id,
@@ -87,5 +87,6 @@ async def get_graph_image(request: Request) -> Response:
         png_bytes = graph.get_graph().draw_mermaid_png()
         return Response(content=png_bytes, media_type="image/png")
     except Exception:
+        logger.debug("Mermaid PNG render unavailable, falling back to text")
         mermaid_text = graph.get_graph().draw_mermaid()
         return Response(content=mermaid_text, media_type="text/plain")

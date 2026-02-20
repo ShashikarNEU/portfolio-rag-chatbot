@@ -148,4 +148,83 @@ def send_email(
         })
 
 
-tools = [search_portfolio, send_email]
+@tool
+def explore_github(
+    action: str,
+    repo_name: str = "",
+    tool_call_id: Annotated[str, InjectedToolCallId] = "",
+) -> Command:
+    """Explore Shashikar's GitHub profile and repositories.
+    Actions: 'list_repos' (all repos), 'repo_details' (one repo),
+    'activity' (recent commits/events). Provide repo_name for
+    repo_details and activity on a specific repo."""
+    try:
+        from app.services.github_service import GitHubService
+
+        service = GitHubService.get_instance()
+
+        if action == "list_repos":
+            content = service.list_repos()
+        elif action == "repo_details":
+            if not repo_name:
+                content = "Please specify which repository you'd like details about."
+            else:
+                content = service.get_repo_details(repo_name)
+        elif action == "activity":
+            content = service.get_activity(repo_name)
+        else:
+            content = (
+                f"Unknown action '{action}'. "
+                "Use 'list_repos', 'repo_details', or 'activity'."
+            )
+
+        return Command(update={
+            "messages": [ToolMessage(
+                content=content,
+                tool_call_id=tool_call_id,
+                name="explore_github",
+            )],
+        })
+    except Exception:
+        return Command(update={
+            "messages": [ToolMessage(
+                content="I'm having trouble reaching GitHub right now. Please try again in a moment.",
+                tool_call_id=tool_call_id,
+                name="explore_github",
+            )],
+        })
+
+
+@tool
+def read_github_file(
+    repo_name: str,
+    file_path: str,
+    tool_call_id: Annotated[str, InjectedToolCallId] = "",
+) -> Command:
+    """Read the source code of a specific file from one of Shashikar's
+    GitHub repositories. Provide the repo name and the file path
+    (e.g., 'app/main.py')."""
+    try:
+        from app.services.github_service import GitHubService
+
+        service = GitHubService.get_instance()
+        content = service.read_file(repo_name, file_path)
+
+        return Command(update={
+            "messages": [ToolMessage(
+                content=content,
+                tool_call_id=tool_call_id,
+                name="read_github_file",
+            )],
+        })
+    except Exception:
+        return Command(update={
+            "messages": [ToolMessage(
+                content="I'm having trouble reading that file right now. Please try again in a moment.",
+                tool_call_id=tool_call_id,
+                name="read_github_file",
+            )],
+        })
+
+
+tools = [search_portfolio, send_email, explore_github, read_github_file]

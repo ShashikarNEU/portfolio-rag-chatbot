@@ -27,6 +27,9 @@ dependencies = [
     "slowapi>=0.1",
     "python-dotenv>=1.2.1",
     "langgraph-checkpoint-sqlite>=3.0.3",
+    "sse-starlette>=3.2.0",
+    "httpx>=0.28.1",
+    "cachetools>=7.0.1",
 ]
 
 [dependency-groups]
@@ -35,14 +38,14 @@ dev = [
     "pytest-asyncio>=0.24",
     "httpx>=0.28",
     "ruff>=0.15.1",
+    "pytest-timeout>=2.4.0",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-markers = [
-    "integration: live integration tests (require running server + real API keys)",
-]
-addopts = "-m 'not integration'"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
+timeout = 60
 
 [tool.hatch.build.targets.wheel]
 packages = ["app"]

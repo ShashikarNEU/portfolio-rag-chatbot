@@ -8,3 +8,4 @@ class State(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     email_sent: bool
     sources: list[dict]
+    thread_corrupted: bool

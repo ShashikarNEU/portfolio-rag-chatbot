@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Install dependencies first (cached layer — only rebuilds when lockfile changes)
 COPY pyproject.toml uv.lock ./
-RUN uv sync --frozen --no-dev
+RUN touch README.md && uv sync --frozen --no-dev
 
 # Copy application code
 COPY . .

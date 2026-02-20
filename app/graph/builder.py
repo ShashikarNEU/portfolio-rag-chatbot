@@ -1,7 +1,7 @@
-import sqlite3
 from pathlib import Path
 
-from langgraph.checkpoint.sqlite import SqliteSaver
+import aiosqlite
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode, tools_condition
 
@@ -11,8 +11,14 @@ from app.graph.worker import Worker
 from app.models.state import State
 
 
-def build_graph(db_path: str | None = None) -> StateGraph:
-    """Build and compile the LangGraph with worker + tools nodes."""
+async def build_graph(
+    db_path: str | None = None,
+) -> tuple[StateGraph, AsyncSqliteSaver, aiosqlite.Connection]:
+    """Build and compile the LangGraph with async checkpointer.
+
+    Returns (compiled_graph, checkpointer, aiosqlite_connection) so the
+    caller can store the checkpointer and close the connection on shutdown.
+    """
     if db_path is None:
         db_path = settings.sqlite_db_path
 
@@ -31,7 +37,8 @@ def build_graph(db_path: str | None = None) -> StateGraph:
     )
     workflow.add_edge("tools", "worker")
 
-    checkpointer = SqliteSaver(
-        sqlite3.connect(db_path, check_same_thread=False)
-    )
-    return workflow.compile(checkpointer=checkpointer)
+    conn = await aiosqlite.connect(db_path)
+    checkpointer = AsyncSqliteSaver(conn)
+    await checkpointer.setup()
+
+    return workflow.compile(checkpointer=checkpointer), checkpointer, conn
