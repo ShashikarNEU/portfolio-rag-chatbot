@@ -73,9 +73,9 @@ async def chat(request: Request, body: ChatRequest) -> ChatResponse:
         )
 
 
-@router.get("/health")
+@router.api_route("/health", methods=["GET", "HEAD"])
 async def health() -> dict[str, str]:
-    """Health check endpoint."""
+    """Health check endpoint (supports HEAD for uptime monitors)."""
     return {"status": "ok"}
 
 
