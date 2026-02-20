@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 import httpx
 from cachetools import TTLCache
 
@@ -54,11 +56,21 @@ class GitHubService:
             if not repos:
                 return "No public repositories found."
 
+            # For repos without a description, fetch the first line of the README
+            missing_desc = [
+                r["name"] for r in repos if not r.get("description")
+            ]
+            readme_summaries = self._fetch_readme_summaries(missing_desc)
+
             lines: list[str] = [f"**{self._username}'s GitHub Repositories:**\n"]
             for r in repos:
                 stars = r.get("stargazers_count", 0)
                 lang = r.get("language") or "N/A"
-                desc = r.get("description") or "No description"
+                desc = (
+                    r.get("description")
+                    or readme_summaries.get(r["name"])
+                    or "No description"
+                )
                 lines.append(
                     f"- **{r['name']}** ({lang}, {stars} stars): {desc}"
                 )
@@ -244,6 +256,49 @@ class GitHubService:
             return "Unable to connect to GitHub right now. Please try again later."
 
     # ── private helpers ──────────────────────────────────────────────
+
+    def _fetch_readme_summaries(self, repo_names: list[str]) -> dict[str, str]:
+        """Fetch the first meaningful line of each repo's README concurrently.
+
+        Returns {repo_name: summary_line} for repos where a README exists.
+        """
+        if not repo_names:
+            return {}
+
+        def _fetch_one(name: str) -> tuple[str, str]:
+            resp = self._client.get(
+                f"/repos/{self._username}/{name}/readme",
+                headers={"Accept": "application/vnd.github.raw+json"},
+                timeout=5.0,
+            )
+            resp.raise_for_status()
+            return name, self._extract_first_line(resp.text)
+
+        summaries: dict[str, str] = {}
+        with ThreadPoolExecutor(max_workers=10) as pool:
+            futures = {pool.submit(_fetch_one, n): n for n in repo_names}
+            for future in as_completed(futures):
+                try:
+                    name, summary = future.result()
+                    if summary:
+                        summaries[name] = summary
+                except Exception:
+                    continue
+        return summaries
+
+    @staticmethod
+    def _extract_first_line(readme_text: str) -> str:
+        """Extract the first meaningful line from README content."""
+        for line in readme_text.splitlines():
+            stripped = line.strip()
+            # Skip blank lines, markdown headers, badges, HTML tags
+            if not stripped:
+                continue
+            if stripped.startswith(("#", "![", "<", "---", "***", "===")):
+                continue
+            # Remove inline markdown links/bold/italic for a clean summary
+            return stripped[:150]
+        return ""
 
     @staticmethod
     def _handle_http_error(
