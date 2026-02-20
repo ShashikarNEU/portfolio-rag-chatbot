@@ -4,9 +4,17 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688?logo=fastapi&logoColor=white)
 ![LangGraph](https://img.shields.io/badge/LangGraph-0.4-7C3AED)
 ![Pinecone](https://img.shields.io/badge/Pinecone-Serverless-00B050?logo=pinecone&logoColor=white)
-![OpenAI](https://img.shields.io/badge/OpenAI-GPT--5--nano-412991?logo=openai&logoColor=white)
+![OpenAI](https://img.shields.io/badge/OpenAI-GPT--4o--mini-412991?logo=openai&logoColor=white)
 
-A RAG-powered AI chatbot for [Shashikar Anthoni Raj's portfolio](https://shashikaranthoniraj.netlify.app/). Visitors can ask natural-language questions about his skills, projects, and experience — or send a contact email — all through a single conversational interface.
+An advanced **RAG (Retrieval-Augmented Generation) chatbot** for [Shashikar Anthoni Raj's portfolio](https://shashikaranthoniraj.netlify.app). Visitors can ask natural language questions about skills, projects, work experience, and education — or send a contact email — all through a single conversational interface.
+
+Built with production-grade RAG techniques: **query expansion**, **RRF (Reciprocal Rank Fusion)** multi-query retrieval, **LLM reranking**, and a **LangGraph** agentic workflow with persistent conversation memory.
+
+---
+
+## Live Demo
+
+Embedded on the portfolio site: [shashikaranthoniraj.netlify.app](https://shashikaranthoniraj.netlify.app)
 
 ---
 
@@ -36,13 +44,26 @@ graph TD
 
 ---
 
+## RAG Pipeline — Advanced Techniques
+
+| Technique | Description |
+|-----------|-------------|
+| **Query Expansion** | LLM generates 2 semantic variants of the user's question to improve recall |
+| **Multi-Query Retrieval** | All 3 queries (original + 2 variants) are run against Pinecone in parallel |
+| **RRF Fusion** | Reciprocal Rank Fusion merges and re-ranks results from all 3 queries |
+| **Priority Boost** | Recent/high-importance documents (e.g., current job) get a relevance boost |
+| **LLM Reranking** | A second LLM pass selects the top 5 most contextually relevant chunks |
+| **Citation Tracking** | Response includes source document names and relevance scores |
+
+---
+
 ## Tech Stack
 
 | Layer | Technology |
 |---|---|
-| API | FastAPI + SlowAPI rate limiting |
+| API | FastAPI + SlowAPI (rate limiting) |
 | Orchestration | LangGraph (StateGraph + ToolNode + SqliteSaver) |
-| LLM | GPT-5 nano via `langchain-openai` |
+| LLM | GPT-4o-mini via `langchain-openai` |
 | Embeddings | `text-embedding-3-small` |
 | Vector DB | Pinecone (serverless, free tier) |
 | Email | SendGrid |
@@ -51,32 +72,67 @@ graph TD
 
 ---
 
-## Setup
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/chat` | Send a message, get a response with citations |
+| GET | `/api/v1/health` | Health check |
+| GET | `/api/v1/graph/image` | Returns LangGraph workflow as a PNG |
+
+### Example Request
+
+```bash
+curl -X POST http://localhost:8000/api/v1/chat \
+  -H "Content-Type: application/json" \
+  -d '{"message": "What projects has Shashikar built?", "thread_id": "session-1"}'
+```
+
+### Example Response
+
+```json
+{
+  "response": "Shashikar has built several notable projects including...",
+  "thread_id": "session-1",
+  "sources": [
+    {
+      "document": "projects.md",
+      "chunk": "Portfolio RAG Chatbot, Sidekick AI Agent...",
+      "relevance_score": 0.95
+    }
+  ],
+  "email_sent": false
+}
+```
+
+---
+
+## Setup & Installation
 
 ### Prerequisites
 
 - Python 3.13+
-- [uv](https://docs.astral.sh/uv/) — install with `curl -LsSf https://astral.sh/uv/install.sh | sh`
+- [uv](https://docs.astral.sh/uv/) — `curl -LsSf https://astral.sh/uv/install.sh | sh`
 - OpenAI API key
 - Pinecone API key (free tier works)
-- SendGrid API key (for email feature)
+- SendGrid API key
 
-### 1. Clone and install
+### 1. Clone and Install
 
 ```bash
-git clone https://github.com/shashikar-anthoniraj/portfolio-rag-chatbot.git
+git clone https://github.com/ShashikarNEU/portfolio-rag-chatbot.git
 cd portfolio-rag-chatbot
 uv sync
 ```
 
-### 2. Configure environment
+### 2. Configure Environment
 
 ```bash
 cp .env.example .env
-# Fill in your API keys in .env
+# Fill in OPENAI_API_KEY, PINECONE_API_KEY, SENDGRID_API_KEY, etc.
 ```
 
-### 3. Ingest portfolio data
+### 3. Ingest Portfolio Data
 
 Embeds all markdown files in `data/raw/` and upserts them to Pinecone:
 
@@ -90,64 +146,49 @@ uv run python scripts/ingest.py
 uv run uvicorn app.main:app --reload
 ```
 
-API: `http://localhost:8000`
-Swagger UI: `http://localhost:8000/docs`
+- API: `http://localhost:8000`
+- Swagger UI: `http://localhost:8000/docs`
 
----
-
-## API Endpoints
-
-### `POST /api/v1/chat`
-
-Send a message. Pass the same `thread_id` across requests to maintain conversation history.
+### 5. Docker (Alternative)
 
 ```bash
-curl -X POST http://localhost:8000/api/v1/chat \
-  -H "Content-Type: application/json" \
-  -d '{"message": "What are Shashikar'\''s skills?", "thread_id": "session-1"}'
-```
-
-**Response:**
-
-```json
-{
-  "response": "Shashikar is proficient in Python, FastAPI, React, AWS, and more...",
-  "thread_id": "session-1",
-  "sources": [
-    {
-      "document": "11_technical_skills.md",
-      "chunk": "Python, FastAPI, React, Spring Boot, AWS...",
-      "relevance_score": 0.92
-    }
-  ],
-  "email_sent": false
-}
-```
-
-### `GET /api/v1/health`
-
-```bash
-curl http://localhost:8000/api/v1/health
-# {"status": "ok"}
-```
-
-### `GET /api/v1/graph/image`
-
-Returns the LangGraph workflow as a PNG image.
-
-```bash
-curl http://localhost:8000/api/v1/graph/image --output graph.png
-```
-
----
-
-## Docker (Local Testing)
-
-```bash
-# Build and run
 docker compose up --build
+```
 
-# API available at http://localhost:8000
+---
+
+## Project Structure
+
+```
+portfolio-rag-chatbot/
+├── app/
+│   ├── main.py                 # FastAPI app, CORS, lifespan
+│   ├── config.py               # pydantic-settings (.env loader)
+│   ├── api/routes.py           # POST /chat, GET /health, GET /graph/image
+│   ├── graph/
+│   │   ├── builder.py          # LangGraph StateGraph compilation
+│   │   ├── worker.py           # LLM node with bound tools
+│   │   └── tools.py            # search_portfolio + send_email tools
+│   ├── rag/
+│   │   ├── query_expansion.py  # LLM query variant generation
+│   │   ├── retriever.py        # Pinecone search + RRF fusion
+│   │   └── reranker.py         # LLM relevance scoring
+│   ├── services/
+│   │   ├── llm_service.py      # OpenAI chat + embeddings wrapper
+│   │   └── email_service.py    # SendGrid wrapper
+│   └── utils/prompts.py        # System prompts
+├── scripts/
+│   ├── ingest.py               # Data ingestion pipeline
+│   ├── test_rag.py             # Manual RAG pipeline test
+│   └── test_graph.py           # End-to-end graph test
+├── tests/
+│   ├── conftest.py             # Fixtures
+│   └── test_api.py             # API unit tests
+├── data/raw/                   # Portfolio markdown source files
+├── Dockerfile
+├── docker-compose.yml
+├── pyproject.toml
+└── .env.example
 ```
 
 ---
@@ -164,46 +205,4 @@ uv run ruff check .
 # Manual integration tests (requires real API keys)
 uv run python scripts/test_rag.py
 uv run python scripts/test_graph.py
-```
-
----
-
-## Project Structure
-
-```
-portfolio-rag-chatbot/
-├── app/
-│   ├── main.py                 # FastAPI app, CORS, lifespan, global error handler
-│   ├── config.py               # pydantic-settings (loads .env)
-│   ├── api/
-│   │   └── routes.py           # POST /chat, GET /health, GET /graph/image
-│   ├── graph/
-│   │   ├── builder.py          # LangGraph StateGraph compilation
-│   │   ├── worker.py           # LLM node with bound tools
-│   │   └── tools.py            # search_portfolio + send_email tools
-│   ├── models/
-│   │   ├── schemas.py          # ChatRequest, ChatResponse, Source
-│   │   └── state.py            # LangGraph State TypedDict
-│   ├── rag/
-│   │   ├── query_expansion.py  # LLM query variant generation
-│   │   ├── retriever.py        # Pinecone search + RRF fusion
-│   │   └── reranker.py         # LLM relevance scoring
-│   ├── services/
-│   │   ├── llm_service.py      # OpenAI chat + embeddings wrapper
-│   │   └── email_service.py    # SendGrid wrapper
-│   └── utils/
-│       └── prompts.py          # Worker system prompt
-├── scripts/
-│   ├── ingest.py               # Data ingestion pipeline
-│   ├── test_rag.py             # Manual RAG pipeline test
-│   └── test_graph.py           # Manual graph end-to-end test
-├── tests/
-│   ├── conftest.py             # Fixtures (mocked client)
-│   └── test_api.py             # API endpoint unit tests
-├── data/
-│   └── raw/                    # Portfolio markdown source files
-├── Dockerfile
-├── docker-compose.yml
-├── pyproject.toml
-└── .env.example
 ```
